@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KDS Pizzaria - Sistema em Tempo Real</title>
+  <style>
+    * { box-sizing: border-box; font-family: Arial, sans-serif; margin: 0; padding: 0; }
+    body { background-color: #121212; color: #fff; padding: 15px; }
+    h1 { text-align: center; color: #ff9f43; margin-bottom: 15px; font-size: 1.5rem; }
+    
+    .form-box { background: #1e1e1e; padding: 15px; border-radius: 8px; margin-bottom: 20px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .form-box input, .form-box select { padding: 10px; border-radius: 4px; border: 1px solid #444; background: #2a2a2a; color: white; flex: 1; min-width: 140px; }
+    .form-box button { background: #ff9f43; border: none; color: white; font-weight: bold; padding: 10px 20px; border-radius: 4px; cursor: pointer; }
+    
+    .kanban { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; }
+    .column { flex: 1; min-width: 280px; background-color: #1e1e1e; border-radius: 8px; padding: 12px; }
+    .column-title { font-size: 1rem; font-weight: bold; margin-bottom: 12px; padding-bottom: 6px; border-bottom: 2px solid #333; }
+    
+    .card { background-color: #2a2a2a; border-radius: 6px; padding: 12px; margin-bottom: 10px; border-left: 4px solid #ff9f43; }
+    .card-header { display: flex; justify-content: space-between; font-weight: bold; margin-bottom: 6px; }
+    .card-type { font-size: 0.75rem; background: #444; padding: 2px 6px; border-radius: 4px; }
+    .card-items { font-size: 0.9rem; margin-bottom: 8px; color: #ddd; }
+    .card-obs { font-size: 0.8rem; color: #ff6b6b; background: rgba(255,107,107,0.1); padding: 4px; border-radius: 4px; margin-bottom: 8px; }
+    
+    .btn { background: #28a745; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; width: 100%; margin-top: 4px; }
+    .btn-back { background: #6c757d; }
+    .btn-del { background: #dc3545; }
+  </style>
+</head>
+<body>
+
+  <h1>🍕 KDS Pizzaria (Tempo Real)</h1>
+
+  <!-- CAIXA / LANÇAMENTO DE PEDIDOS -->
+  <div class="form-box">
+    <input type="text" id="cliente" placeholder="Cliente ou Mesa">
+    <select id="tipo">
+      <option value="Delivery">Delivery</option>
+      <option value="Mesa">Mesa</option>
+      <option value="Balcão">Balcão</option>
+    </select>
+    <input type="text" id="sabores" placeholder="Sabores / Itens (ex: 1/2 Calabresa, 1/2 Musarela)">
+    <input type="text" id="obs" placeholder="Observações (ex: Sem cebola)">
+    <button onclick="adicionarPedido()">➕ Enviar para Cozinha</button>
+  </div>
+
+  <!-- TELA DA COZINHA (KDS) -->
+  <div class="kanban">
+    <div class="column">
+      <div class="column-title" style="color: #4dabf7;">1. MONTAGEM</div>
+      <div id="col-montagem"></div>
+    </div>
+    <div class="column">
+      <div class="column-title" style="color: #ffd43b;">2. FORNO</div>
+      <div id="col-forno"></div>
+    </div>
+    <div class="column">
+      <div class="column-title" style="color: #51cf66;">3. EXPEDIÇÃO</div>
+      <div id="col-expedicao"></div>
+    </div>
+  </div>
+
+  <!-- CONEXÃO COM O SEU FIREBASE CONFIGURADO -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, onSnapshot, doc, updateDoc, deleteDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // ⚡ SUAS CHAVES DO FIREBASE INSERIDAS AQUI
+    const firebaseConfig = {
+      apiKey: "AIzaSyCcibl2aO3YrberTFQwwoBHTJrRlVGg_kk",
+      authDomain: "pizzariakds.firebaseapp.com",
+      projectId: "pizzariakds",
+      storageBucket: "pizzariakds.firebasestorage.app",
+      messagingSenderId: "1054900284870",
+      appId: "1:1054900284870:web:92ab573736ebbc113c96c7"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const pedidosRef = collection(db, "pedidos");
+
+    // ENVIAR NOVO PEDIDO
+    window.adicionarPedido = async function() {
+      const cliente = document.getElementById('cliente').value;
+      const tipo = document.getElementById('tipo').value;
+      const sabores = document.getElementById('sabores').value;
+      const obs = document.getElementById('obs').value;
+
+      if(!cliente || !sabores) return alert('Preencha o cliente e os sabores!');
+
+      await addDoc(pedidosRef, {
+        cliente,
+        tipo,
+        itens: sabores,
+        obs,
+        status: 'montagem',
+        criadoEm: serverTimestamp()
+      });
+
+      document.getElementById('cliente').value = '';
+      document.getElementById('sabores').value = '';
+      document.getElementById('obs').value = '';
+    }
+
+    // MUDAR STATUS DO PEDIDO
+    window.mudarStatus = async function(id, novoStatus) {
+      const pedidoDoc = doc(db, "pedidos", id);
+      await updateDoc(pedidoDoc, { status: novoStatus });
+    }
+
+    // FINALIZAR PEDIDO
+    window.concluirPedido = async function(id) {
+      const pedidoDoc = doc(db, "pedidos", id);
+      await deleteDoc(pedidoDoc);
+    }
+
+    // ATUALIZAR A TELA EM TEMPO REAL SEM ATUALIZAR A PÁGINA
+    onSnapshot(pedidosRef, (snapshot) => {
+      document.getElementById('col-montagem').innerHTML = '';
+      document.getElementById('col-forno').innerHTML = '';
+      document.getElementById('col-expedicao').innerHTML = '';
+
+      snapshot.forEach(docSnap => {
+        const p = docSnap.data();
+        const id = docSnap.id;
+
+        const card = document.createElement('div');
+        card.className = 'card';
+        card.innerHTML = `
+          <div class="card-header">
+            <span>${p.cliente}</span>
+            <span class="card-type">${p.tipo}</span>
+          </div>
+          <div class="card-items">${p.itens}</div>
+          ${p.obs ? `<div class="card-obs">⚠️ ${p.obs}</div>` : ''}
+          ${p.status === 'montagem' ? `<button class="btn" onclick="mudarStatus('${id}', 'forno')">Enviar para Forno 🔥</button>` : ''}
+          ${p.status === 'forno' ? `
+            <button class="btn" onclick="mudarStatus('${id}', 'expedicao')">Enviar p/ Expedição 📦</button>
+            <button class="btn btn-back" onclick="mudarStatus('${id}', 'montagem')">Voltar</button>
+          ` : ''}
+          ${p.status === 'expedicao' ? `
+            <button class="btn btn-del" onclick="concluirPedido('${id}')">Concluir / Finalizar ✅</button>
+          ` : ''}
+        `;
+
+        if(p.status === 'montagem') document.getElementById('col-montagem').appendChild(card);
+        if(p.status === 'forno') document.getElementById('col-forno').appendChild(card);
+        if(p.status === 'expedicao') document.getElementById('col-expedicao').appendChild(card);
+      });
+    });
+  </script>
+</body>
+</html>
